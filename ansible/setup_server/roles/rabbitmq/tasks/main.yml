@@ -1,0 +1,17 @@
+- name: Install RabbitMQ
+  apt:
+    name: rabbitmq-server
+    state: present
+
+- name: Enable RabbitMQ service
+  systemd:
+    name: rabbitmq-server
+    state: started
+    enabled: yes
+
+- name: Add RabbitMQ user
+  command: 'rabbitmqctl add_user {{ rabbitmq_user }} {{ rabbitmq_password }}'
+  ignore_errors: yes
+
+- name: Set RabbitMQ permissions
+  command: "rabbitmqctl set_permissions -p / {{ rabbitmq_user }} '.*' '.*' '.*'"

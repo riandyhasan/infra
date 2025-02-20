@@ -1,0 +1,30 @@
+- name: Install PostgreSQL
+  apt:
+    name: 'postgresql-{{ postgres_version }}'
+    state: present
+
+- name: Ensure PostgreSQL is running
+  systemd:
+    name: postgresql
+    state: started
+    enabled: yes
+
+- name: Create PostgreSQL user
+  become_user: postgres
+  postgresql_user:
+    name: '{{ postgres_user }}'
+    password: '{{ postgres_password }}'
+    state: present
+
+- name: Create PostgreSQL database
+  become_user: postgres
+  postgresql_db:
+    name: '{{ postgres_db }}'
+    owner: '{{ postgres_user }}'
+    state: present
+
+- name: Configure PostgreSQL HBA
+  template:
+    src: pg_hba.conf.j2
+    dest: '/etc/postgresql/{{ postgres_version }}/main/pg_hba.conf'
+  notify: Restart PostgreSQL

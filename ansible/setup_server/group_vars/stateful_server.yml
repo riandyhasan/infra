@@ -1,0 +1,13 @@
+postgres_version: '15'
+postgres_user: 'admin'
+postgres_password: 'securepassword'
+postgres_db: 'mydb'
+postgres_whitelist_ips: ['192.168.1.0/24', '10.0.0.0/16']
+
+redis_bind_address: '0.0.0.0'
+redis_password: 'redispassword'
+redis_whitelist_ips: ['192.168.1.0/24', '10.0.0.0/16']
+
+rabbitmq_user: 'rabbituser'
+rabbitmq_password: 'rabbitpassword'
+rabbitmq_whitelist_ips: ['192.168.1.0/24', '10.0.0.0/16']

@@ -1,0 +1,13 @@
+- name: Update package cache
+  apt:
+    update_cache: yes
+  when: ansible_os_family == "Debian"
+
+- name: Install dependencies
+  apt:
+    name:
+      - curl
+      - ca-certificates
+      - gnupg
+      - software-properties-common
+    state: present

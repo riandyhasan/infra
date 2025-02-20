@@ -1,0 +1,10 @@
+all:
+  children:
+    app_server:
+      hosts:
+        app1.example.com:
+        app2.example.com:
+    stateful_server:
+      hosts:
+        db1.example.com:
+        db2.example.com:

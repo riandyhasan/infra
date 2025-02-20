@@ -1,0 +1,3 @@
+nginx_domain: 'example.com'
+nginx_ssl_cert_path: '/etc/letsencrypt/live/example.com/fullchain.pem'
+nginx_ssl_key_path: '/etc/letsencrypt/live/example.com/privkey.pem'

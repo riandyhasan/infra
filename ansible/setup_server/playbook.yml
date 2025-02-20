@@ -1,0 +1,20 @@
+- name: Setup Common Environment
+  hosts: all
+  become: true
+  roles:
+    - common
+    - docker
+
+- name: Configure App Server
+  hosts: app_server
+  become: true
+  roles:
+    - nginx
+
+- name: Configure Stateful Server
+  hosts: stateful_server
+  become: true
+  roles:
+    - postgres
+    - redis
+    - rabbitmq

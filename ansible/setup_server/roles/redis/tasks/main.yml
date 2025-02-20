@@ -1,0 +1,15 @@
+- name: Install Redis
+  apt:
+    name: redis-server
+    state: present
+
+- name: Configure Redis
+  lineinfile:
+    path: /etc/redis/redis.conf
+    regexp: '^bind'
+    line: 'bind {{ redis_bind_address }}'
+
+- name: Set Redis password
+  lineinfile:
+    path: /etc/redis/redis.conf
+    line: 'requirepass {{ redis_password }}'
