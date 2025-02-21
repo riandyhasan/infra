@@ -1,17 +1,72 @@
-- name: Install RabbitMQ
-  apt:
-    name: rabbitmq-server
-    state: present
+---
+- name: Provision RabbitMQ Server
+  hosts: all
+  become: yes
 
-- name: Enable RabbitMQ service
-  systemd:
-    name: rabbitmq-server
-    state: started
-    enabled: yes
+  tasks:
+    - name: Install dependencies
+      ansible.builtin.apt:
+        name: [curl, gnupg]
+        state: present
+        update_cache: yes
 
-- name: Add RabbitMQ user
-  command: 'rabbitmqctl add_user {{ rabbitmq_user }} {{ rabbitmq_password }}'
-  ignore_errors: yes
+    - name: Add RabbitMQ repository key
+      ansible.builtin.apt_key:
+        url: https://packagecloud.io/rabbitmq/rabbitmq-server/gpgkey
+        state: present
 
-- name: Set RabbitMQ permissions
-  command: "rabbitmqctl set_permissions -p / {{ rabbitmq_user }} '.*' '.*' '.*'"
+    - name: Add RabbitMQ repository
+      ansible.builtin.apt_repository:
+        repo: 'deb https://packagecloud.io/rabbitmq/rabbitmq-server/ubuntu/ {{ ansible_distribution_release }} main'
+        state: present
+        filename: rabbitmq
+        update_cache: yes
+
+    - name: Install RabbitMQ server
+      ansible.builtin.apt:
+        name: rabbitmq-server
+        state: present
+        update_cache: yes
+
+    - name: Start and enable RabbitMQ service
+      ansible.builtin.service:
+        name: rabbitmq-server
+        state: started
+        enabled: yes
+
+    - name: Enable management plugin
+      ansible.builtin.command:
+        cmd: rabbitmq-plugins enable rabbitmq_management
+      register: plugin_result
+      changed_when: "'already enabled' not in plugin_result.stdout"
+      notify: Restart RabbitMQ
+
+    - name: Create RabbitMQ user
+      community.rabbitmq.user:
+        user: '{{ rabbitmq_user }}'
+        password: '{{ rabbitmq_password }}'
+        tags: administrator
+        permissions:
+          - vhost: /
+            configure_priv: .*
+            read_priv: .*
+            write_priv: .*
+        state: present
+      notify: Restart RabbitMQ
+
+    - name: Configure firewall rules
+      ansible.builtin.ufw:
+        rule: allow
+        proto: tcp
+        port: '{{ item.1 }}'
+        src: '{{ item.0 }}'
+      with_nested:
+        - '{{ rabbitmq_allowed_ips }}'
+        - '{{ rabbitmq_ports }}'
+      when: ansible_os_family == 'Debian'
+
+  handlers:
+    - name: Restart RabbitMQ
+      ansible.builtin.service:
+        name: rabbitmq-server
+        state: restarted

@@ -1,13 +1,31 @@
-postgres_version: '15'
-postgres_user: 'admin'
-postgres_password: 'securepassword'
-postgres_db: 'mydb'
-postgres_whitelist_ips: ['192.168.1.0/24', '10.0.0.0/16']
+postgres_db_name: mydatabase
+postgres_db_user: myuser
+postgres_db_password: mysecurepassword # Change to a secure password
+postgresql_allowed_ips:
+  - 192.168.1.0/24 # Add your allowed IPs here
+postgresql_packages:
+  - postgresql
+  - postgresql-contrib
+postgresql_service: postgresql
 
-redis_bind_address: '0.0.0.0'
-redis_password: 'redispassword'
-redis_whitelist_ips: ['192.168.1.0/24', '10.0.0.0/16']
+redis_bind: '0.0.0.0' # Set to specific IP or 0.0.0.0 for all interfaces
+redis_port: 6379
+redis_user: 'redisuser' # Change to your desired username
+redis_password: 'redispass' # Change to a strong password
+redis_allowed_ips: # List of IPs/CIDR to whitelist
+  - '192.168.1.0/24'
+  - '10.0.0.5/32'
 
-rabbitmq_user: 'rabbituser'
-rabbitmq_password: 'rabbitpassword'
-rabbitmq_whitelist_ips: ['192.168.1.0/24', '10.0.0.0/16']
+rabbitmq_user: 'mqadmin'
+rabbitmq_password: 'securepassword' # Change to a strong password
+rabbitmq_allowed_ips:
+  - '192.168.1.0/24' # Add your allowed IPs here
+rabbitmq_ports: [5672, 15672] # AMQP & Management ports
+
+mongodb_version: '6.0' # Change to desired version
+mongodb_admin_user: 'adminUser'
+mongodb_admin_password: 'securepassword' # Change to strong password
+mongodb_database: 'mydb'
+mongodb_allowed_ips:
+  - '192.168.1.0/24' # Add your allowed IPs here
+mongodb_enable_sharding: false # Set to true to enable sharding

@@ -1,0 +1,16 @@
+version: '3.8'
+
+services:
+  backend:
+    image: ${IMAGE_NAME:-your-backend-app}
+    build: .
+    env_file: .env
+    ports:
+      - "${HOST_PORT_START}-${HOST_PORT_END}:${CONTAINER_PORT}"
+    deploy:
+      replicas: ${REPLICA_COUNT:-3}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:${CONTAINER_PORT}/ping"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
