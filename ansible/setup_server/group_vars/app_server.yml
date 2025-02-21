@@ -1,3 +1,6 @@
-nginx_domain: 'example.com'
-nginx_ssl_cert_path: '/etc/letsencrypt/live/example.com/fullchain.pem'
-nginx_ssl_key_path: '/etc/letsencrypt/live/example.com/privkey.pem'
+
+domain: your-domain.com # Set your domain here
+nginx_ssl_cert_path: /etc/letsencrypt/live/{{ domain }}/fullchain.pem
+nginx_ssl_cert_path: /etc/letsencrypt/live/{{ domain }}/privkey.pem
+
+certbot_email: your_email@example.com # Set your email here

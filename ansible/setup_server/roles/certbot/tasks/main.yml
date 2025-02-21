@@ -1,0 +1,37 @@
+---
+- name: Install Certbot and configure SSL
+  hosts: all
+  become: yes
+
+  tasks:
+    - name: Add Certbot PPA
+      apt_repository:
+        repo: ppa:certbot/certbot
+        state: present
+
+    - name: Install Certbot and Nginx plugin
+      apt:
+        name:
+          - certbot
+          - python3-certbot-nginx
+        state: present
+        update_cache: yes
+
+    - name: Obtain SSL certificate
+      command: >
+        certbot --nginx -d {{ domain }} 
+        --non-interactive 
+        --agree-tos 
+        --email {{ certbot_email }} 
+        --redirect 
+        --keep-until-expiring
+      when:
+        - "'nginx' in ansible_facts.packages"
+        - "'certbot' in ansible_facts.packages"
+      notify: Reload Nginx
+
+  handlers:
+    - name: Reload Nginx
+      service:
+        name: nginx
+        state: reloaded

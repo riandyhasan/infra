@@ -10,6 +10,7 @@
   become: true
   roles:
     - nginx
+    - certbot
 
 - name: Configure Stateful Server
   hosts: stateful_server

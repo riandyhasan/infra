@@ -1,10 +1,53 @@
-- name: Install Docker
-  apt:
-    name: docker.io
-    state: present
+---
+- name: Install Docker and configure permissions
+  hosts: all
+  become: yes
 
-- name: Ensure Docker service is running
-  systemd:
-    name: docker
-    state: started
-    enabled: yes
+  tasks:
+    - name: Add Docker GPG key
+      apt_key:
+        url: https://download.docker.com/linux/ubuntu/gpg
+        state: present
+
+    - name: Add Docker repository
+      apt_repository:
+        repo: 'deb [arch=amd64] https://download.docker.com/linux/ubuntu {{ ansible_distribution_release }} stable'
+        state: present
+        filename: docker-ce
+
+    - name: Install Docker CE
+      apt:
+        name:
+          - docker-ce
+          - docker-ce-cli
+          - containerd.io
+        state: present
+        update_cache: yes
+      notify:
+        - Enable and start Docker service
+
+    - name: Create docker group if not exists
+      group:
+        name: docker
+        state: present
+
+    - name: Add user to docker group
+      user:
+        name: '{{ docker_user }}'
+        groups: docker
+        append: yes
+      notify:
+        - Reboot system # Needed to apply group membership
+
+  handlers:
+    - name: Enable and start Docker service
+      service:
+        name: docker
+        enabled: yes
+        state: started
+
+    - name: Reboot system
+      reboot:
+        msg: 'Rebooting to apply group membership changes'
+        reboot_timeout: 300
+      listen: Reboot system
