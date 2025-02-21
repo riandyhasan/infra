@@ -1,45 +1,29 @@
 ---
-- name: Install and configure Nginx with domain template
-  hosts: all
-  become: yes
+- name: Update apt cache
+  apt:
+    update_cache: yes
+    cache_valid_time: 3600
 
-  tasks:
-    - name: Update apt cache
-      apt:
-        update_cache: yes
-        cache_valid_time: 3600
+- name: Install Nginx
+  apt:
+    name: nginx
+    state: present
+  notify: Reload Nginx
 
-    - name: Install Nginx
-      apt:
-        name: nginx
-        state: present
-      notify:
-        - Reload Nginx
+- name: Configure Nginx with domain template
+  template:
+    src: nginx.conf.j2
+    dest: /etc/nginx/sites-available/{{ domain }}
+    owner: root
+    group: root
+    mode: '0644'
+  notify:
+    - Validate Nginx config
+    - Reload Nginx
 
-    - name: Configure Nginx with domain template
-      template:
-        src: nginx.conf.j2
-        dest: /etc/nginx/sites-available/{{ domain }}
-        owner: root
-        group: root
-        mode: '0644'
-      notify:
-        - Enable Nginx config
-        - Reload Nginx
-
-    - name: Enable site configuration
-      file:
-        src: /etc/nginx/sites-available/{{ domain }}
-        dest: /etc/nginx/sites-enabled/{{ domain }}
-        state: link
-      notify: Reload Nginx
-
-  handlers:
-    - name: Enable Nginx config
-      command: nginx -t
-      listen: Enable Nginx config
-
-    - name: Reload Nginx
-      service:
-        name: nginx
-        state: reloaded
+- name: Enable site configuration
+  file:
+    src: /etc/nginx/sites-available/{{ domain }}
+    dest: /etc/nginx/sites-enabled/{{ domain }}
+    state: link
+  notify: Reload Nginx

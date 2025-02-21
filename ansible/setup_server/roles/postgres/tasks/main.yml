@@ -1,68 +1,57 @@
 ---
-- name: Provision PostgreSQL
-  hosts: all
+- name: Install PostgreSQL packages
+  ansible.builtin.apt:
+    name: '{{ postgresql_packages }}'
+    state: present
+    update_cache: yes
+  when: ansible_os_family == 'Debian'
+
+- name: Ensure PostgreSQL service is running
+  ansible.builtin.service:
+    name: '{{ postgresql_service }}'
+    state: started
+    enabled: yes
+
+- name: Get PostgreSQL HBA file path
   become: yes
+  become_user: postgres
+  command: psql -t -c "SHOW hba_file;"
+  register: hba_file_output
+  changed_when: false
 
-  tasks:
-    - name: Install PostgreSQL packages
-      ansible.builtin.apt:
-        name: '{{ postgresql_packages }}'
-        state: present
-        update_cache: yes
-      when: ansible_os_family == 'Debian'
+- name: Set HBA file path fact
+  ansible.builtin.set_fact:
+    postgresql_hba_file: '{{ hba_file_output.stdout | trim }}'
 
-    - name: Ensure PostgreSQL service is running
-      ansible.builtin.service:
-        name: '{{ postgresql_service }}'
-        state: started
-        enabled: yes
+- name: Create PostgreSQL database
+  community.postgresql.postgresql_db:
+    name: '{{ postgres_db_name }}'
+  become: yes
+  become_user: postgres
 
-    - name: Get PostgreSQL HBA file path
-      become: yes
-      become_user: postgres
-      command: psql -t -c "SHOW hba_file;"
-      register: hba_file_output
-      changed_when: false
+- name: Create PostgreSQL user
+  community.postgresql.postgresql_user:
+    name: '{{ postgres_db_user }}'
+    password: '{{ postgres_db_password }}'
+    encrypted: yes # Automatically hash the password
+  become: yes
+  become_user: postgres
 
-    - name: Set HBA file path fact
-      ansible.builtin.set_fact:
-        postgresql_hba_file: '{{ hba_file_output.stdout | trim }}'
+- name: Grant all privileges to user on database
+  community.postgresql.postgresql_privs:
+    database: '{{ postgres_db_name }}'
+    role: '{{ postgres_db_user }}'
+    privs: ALL
+    type: database
+    state: present
+  become: yes
+  become_user: postgres
 
-    - name: Create PostgreSQL database
-      community.postgresql.postgresql_db:
-        name: '{{ postgres_db_name }}'
-      become: yes
-      become_user: postgres
-
-    - name: Create PostgreSQL user
-      community.postgresql.postgresql_user:
-        name: '{{ postgres_db_user }}'
-        password: '{{ postgres_db_password }}'
-        encrypted: yes # Automatically hash the password
-      become: yes
-      become_user: postgres
-
-    - name: Grant all privileges to user on database
-      community.postgresql.postgresql_privs:
-        database: '{{ postgres_db_name }}'
-        role: '{{ postgres_db_user }}'
-        privs: ALL
-        type: database
-        state: present
-      become: yes
-      become_user: postgres
-
-    - name: Whitelist external IPs in pg_hba.conf
-      ansible.builtin.lineinfile:
-        path: '{{ postgresql_hba_file }}'
-        line: 'host {{ postgres_db_name }} {{ postgres_db_user }} {{ item }} scram-sha-256'
-        regexp: "^host\\s+{{ postgres_db_name }}\\s+{{ postgres_db_user }}\\s+{{ item }}\\s+"
-        state: present
-      loop: '{{ postgresql_allowed_ips }}'
-      notify: Restart PostgreSQL
-
-  handlers:
-    - name: Restart PostgreSQL
-      ansible.builtin.service:
-        name: '{{ postgresql_service }}'
-        state: restarted
+- name: Whitelist external IPs in pg_hba.conf
+  ansible.builtin.lineinfile:
+    path: '{{ postgresql_hba_file }}'
+    line: 'host {{ postgres_db_name }} {{ postgres_db_user }} {{ item }} scram-sha-256'
+    regexp: "^host\\s+{{ postgres_db_name }}\\s+{{ postgres_db_user }}\\s+{{ item }}\\s+"
+    state: present
+  loop: '{{ postgresql_allowed_ips }}'
+  notify: Restart PostgreSQL

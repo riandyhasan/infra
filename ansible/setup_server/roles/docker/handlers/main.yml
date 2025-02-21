@@ -1,0 +1,11 @@
+---
+- name: Enable and start Docker service
+  service:
+    name: docker
+    enabled: yes
+    state: started
+
+- name: Reboot system
+  reboot:
+    msg: 'Rebooting to apply group membership changes'
+    reboot_timeout: 300

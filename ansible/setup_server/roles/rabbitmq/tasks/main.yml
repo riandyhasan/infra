@@ -1,72 +1,87 @@
 ---
-- name: Provision RabbitMQ Server
-  hosts: all
-  become: yes
+- name: Add RabbitMQ signing keys
+  apt_key:
+    url: '{{ item }}'
+    keyring: "/usr/share/keyrings/{{ item | regex_replace('.*/', '') }}.gpg"
+    state: present
+  loop:
+    - 'https://keys.openpgp.org/vks/v1/by-fingerprint/0A9AF2115F4687BD29803A206B73A36E6026DFCA'
+    - 'https://github.com/rabbitmq/signing-keys/releases/download/3.0/cloudsmith.rabbitmq-erlang.E495BB49CC4BBE5B.key'
+    - 'https://github.com/rabbitmq/signing-keys/releases/download/3.0/cloudsmith.rabbitmq-server.9F4587F226208342.key'
 
-  tasks:
-    - name: Install dependencies
-      ansible.builtin.apt:
-        name: [curl, gnupg]
-        state: present
-        update_cache: yes
+- name: Configure RabbitMQ repositories
+  apt_repository:
+    repo: |
+      deb [arch=amd64 signed-by=/usr/share/keyrings/rabbitmq.E495BB49CC4BBE5B.gpg] https://ppa1.rabbitmq.com/rabbitmq/rabbitmq-erlang/deb/ubuntu {{ ubuntu_codename }} main
+      deb [arch=amd64 signed-by=/usr/share/keyrings/rabbitmq.E495BB49CC4BBE5B.gpg] https://ppa2.rabbitmq.com/rabbitmq/rabbitmq-erlang/deb/ubuntu {{ ubuntu_codename }} main
+      deb [arch=amd64 signed-by=/usr/share/keyrings/rabbitmq.9F4587F226208342.gpg] https://ppa1.rabbitmq.com/rabbitmq/rabbitmq-server/deb/ubuntu {{ ubuntu_codename }} main
+      deb [arch=amd64 signed-by=/usr/share/keyrings/rabbitmq.9F4587F226208342.gpg] https://ppa2.rabbitmq.com/rabbitmq/rabbitmq-server/deb/ubuntu {{ ubuntu_codename }} main
+    state: present
+    filename: rabbitmq.list
+    update_cache: yes
 
-    - name: Add RabbitMQ repository key
-      ansible.builtin.apt_key:
-        url: https://packagecloud.io/rabbitmq/rabbitmq-server/gpgkey
-        state: present
+- name: Install Erlang packages
+  apt:
+    name:
+      - erlang-base
+      - erlang-asn1
+      - erlang-crypto
+      - erlang-eldap
+      - erlang-ftp
+      - erlang-inets
+      - erlang-mnesia
+      - erlang-os-mon
+      - erlang-parsetools
+      - erlang-public-key
+      - erlang-runtime-tools
+      - erlang-snmp
+      - erlang-ssl
+      - erlang-syntax-tools
+      - erlang-tftp
+      - erlang-tools
+      - erlang-xmerl
+    state: present
+    update_cache: yes
 
-    - name: Add RabbitMQ repository
-      ansible.builtin.apt_repository:
-        repo: 'deb https://packagecloud.io/rabbitmq/rabbitmq-server/ubuntu/ {{ ansible_distribution_release }} main'
-        state: present
-        filename: rabbitmq
-        update_cache: yes
+- name: Install RabbitMQ server
+  apt:
+    name: rabbitmq-server
+    state: present
+    force: yes
+    update_cache: yes
 
-    - name: Install RabbitMQ server
-      ansible.builtin.apt:
-        name: rabbitmq-server
-        state: present
-        update_cache: yes
+- name: Enable and start RabbitMQ service
+  service:
+    name: rabbitmq-server
+    state: started
+    enabled: yes
 
-    - name: Start and enable RabbitMQ service
-      ansible.builtin.service:
-        name: rabbitmq-server
-        state: started
-        enabled: yes
+- name: Enable management plugin
+  command: rabbitmq-plugins enable rabbitmq_management
+  register: plugin_result
+  changed_when: "'already enabled' not in plugin_result.stdout"
+  notify: Restart RabbitMQ
 
-    - name: Enable management plugin
-      ansible.builtin.command:
-        cmd: rabbitmq-plugins enable rabbitmq_management
-      register: plugin_result
-      changed_when: "'already enabled' not in plugin_result.stdout"
-      notify: Restart RabbitMQ
+- name: Create RabbitMQ user
+  community.rabbitmq.rabbitmq_user:
+    user: '{{ rabbitmq_user }}'
+    password: '{{ rabbitmq_password }}'
+    tags: administrator
+    permissions:
+      - vhost: /
+        configure_priv: .*
+        read_priv: .*
+        write_priv: .*
+    state: present
+  notify: Restart RabbitMQ
 
-    - name: Create RabbitMQ user
-      community.rabbitmq.user:
-        user: '{{ rabbitmq_user }}'
-        password: '{{ rabbitmq_password }}'
-        tags: administrator
-        permissions:
-          - vhost: /
-            configure_priv: .*
-            read_priv: .*
-            write_priv: .*
-        state: present
-      notify: Restart RabbitMQ
-
-    - name: Configure firewall rules
-      ansible.builtin.ufw:
-        rule: allow
-        proto: tcp
-        port: '{{ item.1 }}'
-        src: '{{ item.0 }}'
-      with_nested:
-        - '{{ rabbitmq_allowed_ips }}'
-        - '{{ rabbitmq_ports }}'
-      when: ansible_os_family == 'Debian'
-
-  handlers:
-    - name: Restart RabbitMQ
-      ansible.builtin.service:
-        name: rabbitmq-server
-        state: restarted
+- name: Configure firewall rules
+  ufw:
+    rule: allow
+    proto: tcp
+    port: '{{ item.1 }}'
+    src: '{{ item.0 }}'
+  with_nested:
+    - '{{ rabbitmq_allowed_ips }}'
+    - '{{ rabbitmq_ports }}'
+  when: ansible_os_family == 'Debian'

@@ -6,6 +6,7 @@ postgresql_allowed_ips:
 postgresql_packages:
   - postgresql
   - postgresql-contrib
+  - python3-psycopg2
 postgresql_service: postgresql
 
 redis_bind: '0.0.0.0' # Set to specific IP or 0.0.0.0 for all interfaces

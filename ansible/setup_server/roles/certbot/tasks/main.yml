@@ -1,37 +1,22 @@
 ---
-- name: Install Certbot and configure SSL
-  hosts: all
-  become: yes
+- name: Add Certbot GPG key
+  ansible.builtin.apt_key:
+    keyserver: 'hkps://keyserver.ubuntu.com:443'
+    id: '75BCA694' # Certbot's PPA key ID
+    keyring: /usr/share/keyrings/certbot.gpg
+    state: present
 
-  tasks:
-    - name: Add Certbot PPA
-      apt_repository:
-        repo: ppa:certbot/certbot
-        state: present
+- name: Add Certbot repository
+  ansible.builtin.apt_repository:
+    repo: 'deb [arch=amd64 signed-by=/usr/share/keyrings/certbot.gpg] https://ppa.launchpadcontent.net/certbot/certbot/ubuntu jammy main'
+    state: present
+    filename: certbot
+    update_cache: yes
 
-    - name: Install Certbot and Nginx plugin
-      apt:
-        name:
-          - certbot
-          - python3-certbot-nginx
-        state: present
-        update_cache: yes
-
-    - name: Obtain SSL certificate
-      command: >
-        certbot --nginx -d {{ domain }} 
-        --non-interactive 
-        --agree-tos 
-        --email {{ certbot_email }} 
-        --redirect 
-        --keep-until-expiring
-      when:
-        - "'nginx' in ansible_facts.packages"
-        - "'certbot' in ansible_facts.packages"
-      notify: Reload Nginx
-
-  handlers:
-    - name: Reload Nginx
-      service:
-        name: nginx
-        state: reloaded
+- name: Install Certbot and dependencies
+  ansible.builtin.apt:
+    name:
+      - certbot
+      - python3-certbot-nginx
+    state: present
+    update_cache: yes

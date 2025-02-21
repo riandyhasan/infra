@@ -1,90 +1,79 @@
 ---
-- name: Provision MongoDB Server
-  hosts: all
-  become: yes
+- name: Install MongoDB dependencies
+  ansible.builtin.apt:
+    name: [gnupg, curl]
+    state: present
+    update_cache: yes
 
-  tasks:
-    - name: Install MongoDB dependencies
-      ansible.builtin.apt:
-        name: [gnupg, curl]
-        state: present
-        update_cache: yes
+- name: Add MongoDB GPG key
+  ansible.builtin.apt_key:
+    url: 'https://www.mongodb.org/static/pgp/server-{{ mongodb_version }}.asc'
+    state: present
 
-    - name: Add MongoDB GPG key
-      ansible.builtin.apt_key:
-        url: 'https://www.mongodb.org/static/pgp/server-{{ mongodb_version }}.asc'
-        state: present
+- name: Add MongoDB repository
+  ansible.builtin.apt_repository:
+    repo: 'deb [ arch=amd64,arm64 ] https://repo.mongodb.org/apt/ubuntu {{ ansible_distribution_release }}/mongodb-org/{{ mongodb_version }} multiverse'
+    state: present
+    filename: mongodb-org
+    update_cache: yes
 
-    - name: Add MongoDB repository
-      ansible.builtin.apt_repository:
-        repo: 'deb [ arch=amd64,arm64 ] https://repo.mongodb.org/apt/ubuntu {{ ansible_distribution_release }}/mongodb-org/{{ mongodb_version }} multiverse'
-        state: present
-        filename: mongodb-org
-        update_cache: yes
+- name: Install MongoDB packages
+  ansible.builtin.apt:
+    name: mongodb-org
+    state: present
+    update_cache: yes
 
-    - name: Install MongoDB packages
-      ansible.builtin.apt:
-        name: mongodb-org
-        state: present
-        update_cache: yes
+- name: Configure MongoDB bind IP and security
+  ansible.builtin.lineinfile:
+    path: /etc/mongod.conf
+    regexp: '^  bindIp:'
+    line: "  bindIp: {{ mongodb_allowed_ips | join(', ') }}, 127.0.0.1"
+    backrefs: yes
+  notify: Restart MongoDB
 
-    - name: Configure MongoDB bind IP and security
-      ansible.builtin.lineinfile:
-        path: /etc/mongod.conf
-        regexp: '^  bindIp:'
-        line: "  bindIp: {{ mongodb_allowed_ips | join(', ') }}, 127.0.0.1"
-        backrefs: yes
-      notify: Restart MongoDB
+- name: Enable MongoDB authentication
+  ansible.builtin.lineinfile:
+    path: /etc/mongod.conf
+    regexp: '^  authorization:'
+    line: '  authorization: enabled'
+    backrefs: yes
+  notify: Restart MongoDB
 
-    - name: Enable MongoDB authentication
-      ansible.builtin.lineinfile:
-        path: /etc/mongod.conf
-        regexp: '^  authorization:'
-        line: '  authorization: enabled'
-        backrefs: yes
-      notify: Restart MongoDB
+- name: Start and enable MongoDB service
+  ansible.builtin.service:
+    name: mongod
+    state: started
+    enabled: yes
 
-    - name: Start and enable MongoDB service
-      ansible.builtin.service:
-        name: mongod
-        state: started
-        enabled: yes
+- name: Create admin user
+  community.mongodb.mongodb_user:
+    login_user: admin
+    login_password: admin
+    database: admin
+    user: '{{ mongodb_admin_user }}'
+    password: '{{ mongodb_admin_password }}'
+    roles: 'userAdminAnyDatabase, readWriteAnyDatabase'
+    state: present
+  when: "'No users exist' in mongodb_user_check.stdout"
+  register: user_creation
+  changed_when: user_creation.changed
+  retries: 5
+  delay: 10
+  until: user_creation is succeeded
 
-    - name: Create admin user
-      community.mongodb.mongodb_user:
-        login_user: admin
-        login_password: admin
-        database: admin
-        user: '{{ mongodb_admin_user }}'
-        password: '{{ mongodb_admin_password }}'
-        roles: 'userAdminAnyDatabase, readWriteAnyDatabase'
-        state: present
-      when: "'No users exist' in mongodb_user_check.stdout"
-      register: user_creation
-      changed_when: user_creation.changed
-      retries: 5
-      delay: 10
-      until: user_creation is succeeded
+- name: Configure firewall rules
+  ansible.builtin.ufw:
+    rule: allow
+    proto: tcp
+    port: 27017
+    src: '{{ item }}'
+  loop: '{{ mongodb_allowed_ips }}'
+  when: ansible_os_family == 'Debian'
 
-    - name: Configure firewall rules
-      ansible.builtin.ufw:
-        rule: allow
-        proto: tcp
-        port: 27017
-        src: '{{ item }}'
-      loop: '{{ mongodb_allowed_ips }}'
-      when: ansible_os_family == 'Debian'
-
-    - name: Enable sharding (optional)
-      ansible.builtin.shell: |
-        mongo --eval 'sh.enableSharding("{{ mongodb_database }}")'
-      when: mongodb_enable_sharding | bool
-      register: sharding_result
-      changed_when: "'already enabled' not in sharding_result.stdout"
-      failed_when: "'error' in sharding_result.stdout"
-
-  handlers:
-    - name: Restart MongoDB
-      ansible.builtin.service:
-        name: mongod
-        state: restarted
+- name: Enable sharding (optional)
+  ansible.builtin.shell: |
+    mongo --eval 'sh.enableSharding("{{ mongodb_database }}")'
+  when: mongodb_enable_sharding | bool
+  register: sharding_result
+  changed_when: "'already enabled' not in sharding_result.stdout"
+  failed_when: "'error' in sharding_result.stdout"

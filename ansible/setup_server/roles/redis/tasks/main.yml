@@ -1,48 +1,37 @@
 ---
-- name: Provision Redis Server
-  hosts: all
-  become: yes
+- name: Install Redis
+  ansible.builtin.apt:
+    name: redis-server
+    state: present
+    update_cache: yes
 
-  tasks:
-    - name: Install Redis
-      ansible.builtin.apt:
-        name: redis-server
-        state: present
-        update_cache: yes
+- name: Ensure Redis service is running
+  ansible.builtin.service:
+    name: redis-server
+    state: started
+    enabled: yes
 
-    - name: Ensure Redis service is running
-      ansible.builtin.service:
-        name: redis-server
-        state: started
-        enabled: yes
+- name: Configure Redis bind address
+  ansible.builtin.lineinfile:
+    path: /etc/redis/redis.conf
+    regexp: '^bind '
+    line: 'bind {{ redis_bind }}'
+    state: present
+  notify: Restart Redis
 
-    - name: Configure Redis bind address
-      ansible.builtin.lineinfile:
-        path: /etc/redis/redis.conf
-        regexp: '^bind '
-        line: 'bind {{ redis_bind }}'
-        state: present
-      notify: Restart Redis
+- name: Configure Redis ACL user
+  ansible.builtin.lineinfile:
+    path: /etc/redis/redis.conf
+    line: 'user {{ redis_user }} on >{{ redis_password }} ~* &* +@all'
+    regexp: '^user {{ redis_user }} '
+    state: present
+  notify: Restart Redis
 
-    - name: Configure Redis ACL user
-      ansible.builtin.lineinfile:
-        path: /etc/redis/redis.conf
-        line: 'user {{ redis_user }} on >{{ redis_password }} ~* &* +@all'
-        regexp: '^user {{ redis_user }} '
-        state: present
-      notify: Restart Redis
-
-    - name: Configure firewall rules
-      ansible.builtin.ufw:
-        rule: allow
-        proto: tcp
-        port: '{{ redis_port }}'
-        src: '{{ item }}'
-      loop: '{{ redis_allowed_ips }}'
-      when: ansible_os_family == 'Debian'
-
-  handlers:
-    - name: Restart Redis
-      ansible.builtin.service:
-        name: redis-server
-        state: restarted
+- name: Configure firewall rules
+  ansible.builtin.ufw:
+    rule: allow
+    proto: tcp
+    port: '{{ redis_port }}'
+    src: '{{ item }}'
+  loop: '{{ redis_allowed_ips }}'
+  when: ansible_os_family == 'Debian'
