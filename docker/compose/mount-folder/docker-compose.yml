@@ -5,8 +5,7 @@ services:
     image: your-backend-image
     volumes:
       - ~/app_uploads:/app/uploads # app_uploads on VM, /app/uploads on backend app & Docker
-    environment:
-      - UPLOAD_DIR=/app/uploads
+    env_file: .env
     ports:
       - "3000:3000"
 
