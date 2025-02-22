@@ -1,0 +1,19 @@
+version: '3.8'
+
+services:
+  backend:
+    image: your-backend-image
+    volumes:
+      - ~/app_uploads:/app/uploads # app_uploads on VM, /app/uploads on backend app & Docker
+    environment:
+      - UPLOAD_DIR=/app/uploads
+    ports:
+      - "3000:3000"
+
+volumes:
+  app_uploads:
+    driver: local
+    driver_opts:
+      o: bind
+      type: none
+      device: ~/app_uploads

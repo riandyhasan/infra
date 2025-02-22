@@ -22,7 +22,7 @@
 - name: Configure Redis ACL user
   ansible.builtin.lineinfile:
     path: /etc/redis/redis.conf
-    line: 'user {{ redis_user }} on >{{ redis_password }} ~* &* +@all'
+    line: 'user {{ redis_user }} on >{{ redis_password }} ~* +@all'
     regexp: '^user {{ redis_user }} '
     state: present
   notify: Restart Redis
