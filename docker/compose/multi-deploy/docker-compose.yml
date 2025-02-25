@@ -2,15 +2,13 @@ version: '3.8'
 
 services:
   backend:
-    image: ${IMAGE_NAME:-your-backend-app}
-    build: .
+    image: ${IMAGE_NAME:-backend}
     env_file: .env
     ports:
-      - "${HOST_PORT_START}-${HOST_PORT_END}:${CONTAINER_PORT}"
-    deploy:
-      replicas: ${REPLICA_COUNT:-3}
+      - "${HOST_PORT_RANGE}:8080"
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:${CONTAINER_PORT}/ping"]
-      interval: 30s
+      test: ["CMD-SHELL", "wget -q -O - http://localhost:8080/ping || exit 1"]
+      interval: 10s
       timeout: 5s
       retries: 3
+      start_period: 20s

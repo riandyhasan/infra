@@ -2,86 +2,58 @@
 set -eo pipefail
 
 # Configuration
-NGINX_CONF="/etc/nginx/conf.d/load-balancer.conf"
+REPLICA_COUNT=3
+NGINX_CONFIG="/etc/nginx/sites-available/api.com"
 SERVICE_NAME="backend"
-LOG_FILE="./deploy.log"
+TEMPORARY_SCALE=$((REPLICA_COUNT * 2))
 
-# Initialize logging
-exec > >(tee -a "$LOG_FILE") 2>&1
+# Get current containers before scaling
+PREVIOUS_CONTAINERS=$(docker-compose ps -q ${SERVICE_NAME})
 
-# Function to get current mapped ports
-get_active_ports() {
-  docker-compose ps $SERVICE_NAME | grep 'Up' | awk '{print $NF}' | 
-  awk -F'->' '{print $1}' | cut -d':' -f2 | sort -u
-}
+# Scale up new instances
+echo "Scaling up to ${TEMPORARY_SCALE} instances..."
+docker-compose up -d --scale ${SERVICE_NAME}=${TEMPORARY_SCALE} --no-recreate
 
-# 1. Start new containers alongside old ones
-echo "Deploying new containers..."
-docker-compose up -d --build --scale $SERVICE_NAME=+1 --no-recreate
+# Wait for new containers to initialize
+echo "Waiting for new containers to start..."
+sleep 10  # Reduced from 100s to 10s, but consider health checks
 
-# 2. Wait for new containers to become healthy
-echo "Waiting for new containers to stabilize..."
-NEW_PORTS=$(get_active_ports)
-for port in $NEW_PORTS; do
-  while ! curl -sf "http://127.0.0.1:$port/health" >/dev/null; do
-    sleep 2
-  done
-  echo "Port $port healthy"
+# Get updated container list
+ALL_CONTAINERS=$(docker-compose ps -q ${SERVICE_NAME})
+
+# Identify new containers (those not in previous list)
+NEW_CONTAINERS=$(comm -23 <(echo "${ALL_CONTAINERS}" | sort) <(echo "${PREVIOUS_CONTAINERS}" | sort))
+
+# Get ports for new containers
+NEW_PORTS=$(echo "${NEW_CONTAINERS}" | xargs -n1 docker inspect --format='{{(index (index .NetworkSettings.Ports "8080/tcp") 0).HostPort}}')
+
+# Update Nginx configuration
+echo "Updating Nginx upstream..."
+sudo cp "${NGINX_CONFIG}" "${NGINX_CONFIG}.bak"
+
+UPSTREAM_BLOCK="upstream backend {"
+for port in ${NEW_PORTS}; do
+    UPSTREAM_BLOCK+="\n    server 127.0.0.1:${port};"
 done
+UPSTREAM_BLOCK+="\n}"
 
-# 3. First Nginx update with all ports
-echo "Updating Nginx with all active ports..."
-sudo cp "$NGINX_CONF" "${NGINX_CONF}.bak"
-sudo tee "$NGINX_CONF" >/dev/null <<EOF
-upstream backend {
-    least_conn;
-    $(for port in $NEW_PORTS; do echo "    server 127.0.0.1:$port;"; done)
-}
+sudo perl -i -pe "BEGIN{undef $/;} s/upstream backend \{.*?\}/$(echo -e ${UPSTREAM_BLOCK})/smg" "${NGINX_CONFIG}"
 
-server {
-    listen 80;
-    
-    location / {
-        proxy_pass http://backend;
-        proxy_set_header Host \$host;
-        proxy_http_version 1.1;
-        proxy_set_header Connection "";
-    }
-}
-EOF
+# Validate and reload Nginx
+sudo nginx -t && sudo nginx -s reload
 
-# 4. Gracefully reload Nginx
-echo "First Nginx reload..."
-sudo nginx -t && sudo systemctl reload nginx
+# Gracefully remove old containers
+echo "Removing previous containers..."
+if [ -n "${PREVIOUS_CONTAINERS}" ]; then
+    echo "Stopping containers: ${PREVIOUS_CONTAINERS}"
+    docker kill -s SIGTERM ${PREVIOUS_CONTAINERS} || true
+    sleep 5  # Wait for graceful shutdown
+    docker rm -f ${PREVIOUS_CONTAINERS} || true
+fi
 
-# 5. Scale down to original size
-echo "Removing old containers..."
-docker-compose up -d --scale $SERVICE_NAME=$(docker-compose config --services | 
-  xargs -I{} docker-compose ps -q {} | wc -l | awk '{print $1-1}')
+# Final scale adjustment
+echo "Ensuring correct replica count..."
+docker-compose up -d --scale ${SERVICE_NAME}=${REPLICA_COUNT}
 
-# 6. Final Nginx update after scale down
-FINAL_PORTS=$(get_active_ports)
-echo "Final Nginx update with remaining ports: $FINAL_PORTS"
-sudo tee "$NGINX_CONF" >/dev/null <<EOF
-upstream backend {
-    least_conn;
-    $(for port in $FINAL_PORTS; do echo "    server 127.0.0.1:$port;"; done)
-}
-
-server {
-    listen 80;
-    
-    location / {
-        proxy_pass http://backend;
-        proxy_set_header Host \$host;
-        proxy_http_version 1.1;
-        proxy_set_header Connection "";
-    }
-}
-EOF
-
-# 7. Final Nginx reload
-echo "Final Nginx reload..."
-sudo nginx -t && sudo systemctl reload nginx
-
-echo "Deployment complete!"
+echo "Rollout complete! New active ports:"
+echo "${NEW_PORTS}"
